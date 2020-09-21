@@ -1,0 +1,68 @@
+#cloud-config
+
+# update package database on first boot (apt-get update)
+package_update: true
+
+# upgrade the instance on first boot (apt-get upgrade)
+package_upgrade: true
+
+packages:
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - wget
+  - curl
+  - git
+  - nmap
+  - htop
+  - apt-transport-https
+  - ca-certificates
+  - gnupg2
+  - software-properties-common
+  - ncdu
+
+users:
+  - name: <PLACEHOLDER-USERNAME>
+    ssh-authorized-keys:
+      - ssh-rsa <PLACEHOLDER-SSH-KEY>
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    groups: sudo
+    shell: /bin/bash
+
+runcmd:
+# configure ssh access
+  - sed -i -e '/^PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i -e '/^#\+Port/s/^.*$/Port 2222/' /etc/ssh/sshd_config
+  - sed -i -e '/^#\+PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^#\+LoginGraceTime/s/^.*$/LoginGraceTime 60/' /etc/ssh/sshd_config
+  - sed -i -e '/^#\+ClientAliveInterval/s/^.*$/ClientAliveInterval 10/' /etc/ssh/sshd_config
+  - sed -i -e '/^#\+ClientAliveCountMax/s/^.*$/ClientAliveCountMax 3/' /etc/ssh/sshd_config
+  - sed -i -e '$aAllowUsers <PLACEHOLDER-USERNAME>' /etc/ssh/sshd_config
+  - sudo service ssh restart
+
+# configure firewall
+  - sudo ufw default deny incoming
+  - sudo ufw default allow outgoing
+  - sudo ufw allow 2222
+  - sudo ufw allow https
+  - sudo ufw allow 8886
+  - sed -i -e '/^IPV6/s/^.*$/IPV6=yes/' /etc/default/ufw
+  - sed -i -e '/^ENABLED/s/^.*$/ENABLED=yes/' /etc/ufw/ufw.conf
+  - sudo ufw enable
+
+# install docker
+  - curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+  - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
+  - sudo apt-get update
+  - sudo apt-get install -y docker-ce
+
+# install docker-compose
+  - sudo curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+  - sudo chmod +x /usr/local/bin/docker-compose
+
+# configure unattended upgrades
+write_files:
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
